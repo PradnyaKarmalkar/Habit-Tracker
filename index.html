@@ -143,6 +143,42 @@
             margin-left: auto;
         }
 
+        .habit-actions {
+            display: flex;
+            gap: 8px;
+            margin-left: 15px;
+        }
+
+        .action-btn {
+            padding: 8px 12px;
+            border: none;
+            border-radius: 6px;
+            cursor: pointer;
+            font-size: 0.9em;
+            transition: all 0.3s;
+            font-weight: 500;
+        }
+
+        .edit-btn {
+            background: #ffc107;
+            color: #333;
+        }
+
+        .edit-btn:hover {
+            background: #ffb300;
+            transform: scale(1.05);
+        }
+
+        .delete-btn {
+            background: #dc3545;
+            color: white;
+        }
+
+        .delete-btn:hover {
+            background: #c82333;
+            transform: scale(1.05);
+        }
+
         /* Month Navigation */
         .month-navigation {
             display: flex;
@@ -528,6 +564,37 @@
         </div>
     </div>
 
+    <!-- Edit Habit Modal -->
+    <div class="modal" id="editHabitModal">
+        <div class="modal-content">
+            <h2>Edit Habit</h2>
+            <div class="form-group">
+                <label>Habit Name</label>
+                <input type="text" id="editHabitNameInput" placeholder="e.g., Drink 3L Water">
+            </div>
+            <div class="form-group">
+                <label>Emoji</label>
+                <input type="text" id="editHabitEmojiInput" placeholder="e.g., 💧" maxlength="2">
+            </div>
+            <div class="modal-buttons">
+                <button class="btn-secondary" onclick="closeEditHabitModal()">Cancel</button>
+                <button class="btn-primary" onclick="saveEditHabit()">Save Changes</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- Delete Confirmation Modal -->
+    <div class="modal" id="deleteHabitModal">
+        <div class="modal-content">
+            <h2>Delete Habit</h2>
+            <p style="margin-bottom: 20px;">Are you sure you want to delete this habit? This will also delete all associated data.</p>
+            <div class="modal-buttons">
+                <button class="btn-secondary" onclick="closeDeleteHabitModal()">Cancel</button>
+                <button class="btn-primary" style="background: #dc3545;" onclick="confirmDeleteHabit()">Delete</button>
+            </div>
+        </div>
+    </div>
+
     <script>
         const defaultHabits = [
             { name: "Wake up at 6AM", emoji: "⏰", goal: 30 },
@@ -548,6 +615,8 @@
         let weeklyData = {};
         let currentViewMonth = new Date().getMonth();
         let currentViewYear = new Date().getFullYear();
+        let editingHabitIndex = null;
+        let deletingHabitIndex = null;
 
         function initializeApp() {
             const stored = localStorage.getItem('habitTrackerData');
@@ -608,14 +677,17 @@
                 const isCompleted = weeklyData[todayKey]?.[index] || false;
                 const div = document.createElement('div');
                 div.className = `habit-item ${isCompleted ? 'completed' : ''}`;
-                div.onclick = () => toggleHabit(index);
                 
                 div.innerHTML = `
-                    <div class="habit-checkbox">${isCompleted ? '✓' : ''}</div>
-                    <div class="habit-info">
+                    <div class="habit-checkbox" onclick="toggleHabit(${index})">${isCompleted ? '✓' : ''}</div>
+                    <div class="habit-info" onclick="toggleHabit(${index})">
                         <div class="habit-name">${habit.name}</div>
                     </div>
                     <div class="habit-emoji">${habit.emoji}</div>
+                    <div class="habit-actions">
+                        <button class="action-btn edit-btn" onclick="event.stopPropagation(); openEditHabitModal(${index})">✏️ Edit</button>
+                        <button class="action-btn delete-btn" onclick="event.stopPropagation(); openDeleteHabitModal(${index})">🗑️ Delete</button>
+                    </div>
                 `;
                 
                 habitList.appendChild(div);
@@ -861,6 +933,78 @@
                 renderToday();
                 renderWeekly();
                 closeAddHabitModal();
+            }
+        }
+
+        function openEditHabitModal(index) {
+            editingHabitIndex = index;
+            const habit = habits[index];
+            document.getElementById('editHabitNameInput').value = habit.name;
+            document.getElementById('editHabitEmojiInput').value = habit.emoji;
+            document.getElementById('editHabitModal').classList.add('active');
+        }
+
+        function closeEditHabitModal() {
+            document.getElementById('editHabitModal').classList.remove('active');
+            document.getElementById('editHabitNameInput').value = '';
+            document.getElementById('editHabitEmojiInput').value = '';
+            editingHabitIndex = null;
+        }
+
+        function saveEditHabit() {
+            if (editingHabitIndex !== null) {
+                const name = document.getElementById('editHabitNameInput').value.trim();
+                const emoji = document.getElementById('editHabitEmojiInput').value.trim();
+                
+                if (name) {
+                    habits[editingHabitIndex].name = name;
+                    habits[editingHabitIndex].emoji = emoji || '⭐';
+                    saveData();
+                    renderToday();
+                    renderWeekly();
+                    closeEditHabitModal();
+                }
+            }
+        }
+
+        function openDeleteHabitModal(index) {
+            deletingHabitIndex = index;
+            document.getElementById('deleteHabitModal').classList.add('active');
+        }
+
+        function closeDeleteHabitModal() {
+            document.getElementById('deleteHabitModal').classList.remove('active');
+            deletingHabitIndex = null;
+        }
+
+        function confirmDeleteHabit() {
+            if (deletingHabitIndex !== null) {
+                // Remove the habit
+                habits.splice(deletingHabitIndex, 1);
+                
+                // Remove data for this habit from all dates
+                Object.keys(weeklyData).forEach(dateKey => {
+                    if (weeklyData[dateKey][deletingHabitIndex] !== undefined) {
+                        delete weeklyData[dateKey][deletingHabitIndex];
+                    }
+                    
+                    // Reindex remaining habits
+                    const newData = {};
+                    Object.keys(weeklyData[dateKey]).forEach(key => {
+                        const habitIndex = parseInt(key);
+                        if (habitIndex > deletingHabitIndex) {
+                            newData[habitIndex - 1] = weeklyData[dateKey][habitIndex];
+                        } else if (habitIndex < deletingHabitIndex) {
+                            newData[habitIndex] = weeklyData[dateKey][habitIndex];
+                        }
+                    });
+                    weeklyData[dateKey] = newData;
+                });
+                
+                saveData();
+                renderToday();
+                renderWeekly();
+                closeDeleteHabitModal();
             }
         }
 
